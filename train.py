@@ -36,6 +36,12 @@ def train_net(net,
     except (AssertionError, RuntimeError):
         dataset = BasicDataset(dir_img, dir_mask, img_scale)
 
+
+    tr_losses = []
+    val_losses = []
+    tr_acc = []
+    val_acc = []
+
     # 2. Split into train / validation partitions
     n_val = int(len(dataset) * val_percent)
     n_train = len(dataset) - n_val
@@ -72,6 +78,8 @@ def train_net(net,
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
     criterion = nn.CrossEntropyLoss()
     global_step = 0
+
+    
 
     # 5. Begin training
     for epoch in range(1, epochs+1):
@@ -111,6 +119,8 @@ def train_net(net,
                     'epoch': epoch
                 })
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
+                tr_losses.append(loss.item())
+
 
                 # Evaluation round
                 division_step = (n_train // (10 * batch_size))
@@ -140,11 +150,13 @@ def train_net(net,
                             'epoch': epoch,
                             **histograms
                         })
+                        val_acc.append(val_score)
 
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             torch.save(net.state_dict(), str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
             logging.info(f'Checkpoint {epoch} saved!')
+            torch.save([tr_losses,val_acc],str(dir_checkpoint / 'checkpoint_stats_epoch{}.pth'.format(epoch)))
 
 
 def get_args():
