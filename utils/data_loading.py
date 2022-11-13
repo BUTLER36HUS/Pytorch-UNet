@@ -2,12 +2,59 @@ import logging
 from os import listdir
 from os.path import splitext
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+
+class PhcDataset(Dataset):
+    def __init__(self, images_dir: str, masks_dir: str, scale: float = 1.0, mask_suffix: str = '',use_rf: bool = False, **kwargs):
+        self.images = list(Path(images_dir).iterdir())
+        self.images_dir = images_dir
+        self.masks_dir = masks_dir
+        self.scale = scale
+        self.mask_suffix = mask_suffix
+        self.use_rf = use_rf
+    
+    def __len__(self):
+        return len(self.images)
+    
+
+    @staticmethod
+    def preprocess(pil_img, scale, is_mask):
+        w, h = pil_img.size
+        newW, newH = int(scale * w), int(scale * h)
+        assert newW > 0 and newH > 0, 'Scale is too small, resized images would have no pixel'
+        pil_img = pil_img.resize((newW, newH), resample=Image.NEAREST if is_mask else Image.BICUBIC)
+        img_ndarray = np.asarray(pil_img)
+
+        if not is_mask:
+            if img_ndarray.ndim == 2:
+                img_ndarray = img_ndarray[np.newaxis, ...]
+            else:
+                img_ndarray = img_ndarray.transpose((2, 0, 1))
+
+            img_ndarray = img_ndarray / 255
+        else:
+            img_ndarray = np.array(img_ndarray>0, dtype=np.int)
+
+        return img_ndarray
+
+    def __getitem__(self, idx):
+        img_path = self.images[idx]
+        img = Image.open(img_path)
+        mask = Image.open(f'{self.masks_dir}/{img_path.name}',)
+
+        assert img.size == mask.size, \
+            f'Image and mask {img_path} should be the same size, but are {img.size} and {mask.size}'
+
+        img = self.preprocess(img, self.scale, is_mask=False)
+        mask = self.preprocess(mask, self.scale, is_mask=True)
+
+        return torch.as_tensor(img.copy()).float(), torch.as_tensor(mask.copy()).long()
 
 class BasicDataset(Dataset):
     def __init__(self, images_dir: str, masks_dir: str, scale: float = 1.0, mask_suffix: str = ''):
@@ -57,7 +104,6 @@ class BasicDataset(Dataset):
         name = self.ids[idx]
         mask_file = list(self.masks_dir.glob(name + self.mask_suffix + '.*'))
         img_file = list(self.images_dir.glob(name + '.*'))
-
         assert len(img_file) == 1, f'Either no image or multiple images found for the ID {name}: {img_file}'
         assert len(mask_file) == 1, f'Either no mask or multiple masks found for the ID {name}: {mask_file}'
         mask = self.load(mask_file[0])
