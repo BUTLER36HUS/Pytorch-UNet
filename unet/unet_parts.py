@@ -32,12 +32,14 @@ class DoubleConv(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         if self.use_rf:
-            used_area = torch.mean((x>0)*1.0)
+            used_area = torch.mean(x**2)
+            # used_area = torch.mean(((x>0)*1.0))
         x = self.cv2(x)
         x = self.bn2(x)
         x = self.relu(x)
         if self.use_rf:
-            used_area += torch.mean((x>0)*1.0)
+            used_area+= torch.mean(x**2)
+            # used_area += torch.mean(((x>0)*1.0))
             return x,  used_area
         return x
         # return self.double_conv(x)

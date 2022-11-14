@@ -26,17 +26,17 @@ class UNet(nn.Module):
 
     def forward(self, x):
         if self.use_rf:
-            used_areas = []
+            used_areas = torch.zeros(5).to(self.device)
             x1,used_area = self.inc(x)
-            used_areas.append(used_area)
+            used_areas[0] += used_area
             x2,used_area = self.down1(x1)
-            used_areas.append(used_area)
+            used_areas[1] = used_areas[0]+used_area
             x3,used_area = self.down2(x2)
-            used_areas.append(used_area)
+            used_areas[2] = used_areas[1]+used_area
             x4,used_area = self.down3(x3)
-            used_areas.append(used_area)
+            used_areas[3] = used_areas[2]+used_area
             x5,used_area = self.down4(x4)
-            used_areas.append(used_area)
+            used_areas[4] = used_areas[3]+used_area
         else:
             x1 = self.inc(x)
             x2 = self.down1(x1)

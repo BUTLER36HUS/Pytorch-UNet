@@ -56,6 +56,23 @@ class PhcDataset(Dataset):
 
         return torch.as_tensor(img.copy()).float(), torch.as_tensor(mask.copy()).long()
 
+class SkinCancerDataset(PhcDataset):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __getitem__(self, idx):
+        img_path = self.images[idx]
+        img = Image.open(img_path)
+        mask = Image.open(f'{self.masks_dir}/imgy{img_path.name[4:]}',) # imgy is the prefix for the mask
+
+        assert img.size == mask.size, \
+            f'Image and mask {img_path} should be the same size, but are {img.size} and {mask.size}'
+
+        img = self.preprocess(img, self.scale, is_mask=False)
+        mask = self.preprocess(mask, self.scale, is_mask=True)
+
+        return torch.as_tensor(img.copy()).float(), torch.as_tensor(mask.copy()).long()
+
 class BasicDataset(Dataset):
     def __init__(self, images_dir: str, masks_dir: str, scale: float = 1.0, mask_suffix: str = ''):
         self.images_dir = Path(images_dir)
