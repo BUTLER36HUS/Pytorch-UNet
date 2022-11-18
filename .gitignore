@@ -7,3 +7,7 @@ checkpoints/
 venv/
 .idea/
 wandb/
+logs/
+.github/
+.ipynb_checkpoints/
+lightning_logs/

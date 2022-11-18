@@ -20,6 +20,7 @@ def get_args():
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
     parser.add_argument('--classes', '-c', type=int, default=2, help='Number of classes')
     parser.add_argument('--rfr', type=bool, default=False, help='Use Receptive Field Regularization')
+    parser.add_argument('--rf_on_up', type=bool, default=False, help='Use Receptive Field Regularization on Upsampler')
     parser.add_argument('--rf_reg_weight', type=float, default=0.1, help='Receptive Field Regularization weight')
     parser.add_argument('--rf_reg_layers', type=int, default=4, help='Receptive Field Regularization layer numbers')
     parser.add_argument('--dataset', type=str, default='phc', help='Dataset to use')
@@ -51,6 +52,7 @@ if __name__ == '__main__':
 
     model = UNetLightning(
         use_rf=args.rfr,
+        rf_on_up=args.rf_on_up,
         rf_reg_weight=args.rf_reg_weight,
         n_channels=args.channel,
         num_classes=args.classes,
@@ -65,10 +67,12 @@ if __name__ == '__main__':
         max_epochs=100,
         callbacks=[TQDMProgressBar(refresh_rate=20)],
     )
+    print("ARGS:", args)
     trainer.fit(model, data_mod)
-    torch.save([model.tr_loss,model.va_loss,model.tr_acc,model.va_acc],
-        'stats_use_rf={}_rf_reg_weight={}_reg_layer={}_lr={}_epoch={}_dataset={}.pkl'.format(
+    torch.save([model.tr_loss,model.va_loss,model.tr_acc,model.va_acc,model.tr_dice,model.va_dice,model.rf_reg_loss if args.rfr else []] ,
+        'stats/stats_use_rf={}_on_up={}_rf_reg_weight={}_reg_layer={}_lr={}_epoch={}_dataset={}.pkl'.format(
             args.rfr, 
+            args.rf_on_up,
             args.rf_reg_weight,
             args.rf_reg_layers,
             args.lr,

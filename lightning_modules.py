@@ -68,6 +68,7 @@ class SkinCancerDataModule(LightningDataModule):
 class UNetLightning(LightningModule):
     def __init__(self, 
         use_rf: bool = False, # Use Receiver-Field Regularization
+        rf_on_up: bool = False, # Use Receiver-Field Regularization on Upsampling
         rf_reg_weight: float = 0.1,
         num_classes: int = 2,
         n_channels: int = 1,
@@ -81,10 +82,11 @@ class UNetLightning(LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.model = UNet(n_channels=n_channels,n_classes=num_classes, use_rf=use_rf)
+        self.model = UNet(n_channels=n_channels,n_classes=num_classes, use_rf=use_rf, rf_on_up=rf_on_up)
         self.loss_fn = nn.CrossEntropyLoss()
         self.num_classes = num_classes
         self.use_rf = use_rf
+        self.rf_on_up = rf_on_up
         self.rf_reg_weight = rf_reg_weight
         self.reg_layers = reg_layers
         self.tr_loss = []
@@ -95,7 +97,14 @@ class UNetLightning(LightningModule):
         self.tr_temp_acc = []
         self.va_temp_loss = []
         self.va_temp_acc = []
-    
+        self.tr_dice = []
+        self.va_dice = []
+        self.tr_temp_dice = []
+        self.va_temp_dice = []
+        self.rf_reg_loss = []
+        self.rf_reg_temp_loss = []
+
+
     def forward(self,x):
         # if self.use_rf:
         #     x = torch.tensor(x,requires_grad=True).to(self.device)
@@ -105,7 +114,7 @@ class UNetLightning(LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         x, y = x.to(self.device), y.to(self.device)
-        self.model.set_use_rf(self.use_rf)
+        self.model.set_use_rf(self.use_rf,self.rf_on_up)
         # if self.use_rf:
         #     pred_mask, rf_loss = self.forward(x)
         # else: pred_mask = self.forward(x)
@@ -119,6 +128,7 @@ class UNetLightning(LightningModule):
         dice = dice_loss(F.softmax(pred_mask, dim=1).float(),
                     F.one_hot(y, self.num_classes).permute(0, 3, 1, 2).float(),
                     multiclass=True)
+        self.tr_temp_dice.append(dice.item())
         self.log("tr_dice", dice,prog_bar=True)
         loss += dice
         self.tr_temp_loss.append(loss.detach().item())
@@ -126,6 +136,7 @@ class UNetLightning(LightningModule):
             rf_loss = used_areas[self.reg_layers]
             # rf_loss = torch.mean(used_areas[:self.reg_layers])
             freq_reg_loss = self.rf_reg_weight * rf_loss
+            self.rf_reg_temp_loss.append(freq_reg_loss.item())
             loss += freq_reg_loss
             # print(rf_loss.requires_grad,used_areas[0].requires_grad)
             self.log("tr_freq_reg", freq_reg_loss,prog_bar=True)
@@ -148,18 +159,23 @@ class UNetLightning(LightningModule):
     def training_epoch_end(self, training_step_outputs):
         self.tr_loss.append(sum(self.tr_temp_loss)/len(self.tr_temp_loss))
         self.tr_acc.append(sum(self.tr_temp_acc)/len(self.tr_temp_acc))
+        self.tr_dice = sum(self.tr_temp_dice)/len(self.tr_temp_dice)
+        self.rf_reg_loss.append(sum(self.rf_reg_temp_loss)/len(self.rf_reg_temp_loss))
         self.tr_temp_loss = []
         self.tr_temp_acc = []
+        self.tr_temp_dice = []
+        self.rf_reg_temp_loss = []
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         x, y = x.to(self.device), y.to(self.device)
-        self.model.set_use_rf(False)
+        self.model.set_use_rf(False,False)
         pred_mask = self.forward(x)
         loss = self.loss_fn(pred_mask, y)
         dice = dice_loss(F.softmax(pred_mask, dim=1).float(),
                                        F.one_hot(y, self.num_classes).permute(0, 3, 1, 2).float(),
                                        multiclass=True)
+        self.va_temp_dice.append(dice.item())
         self.log("va_dice", dice,prog_bar=True)
         loss += dice
         self.va_temp_loss.append(loss.detach().item())
@@ -171,8 +187,10 @@ class UNetLightning(LightningModule):
     def validation_epoch_end(self, validation_step_outputs):
         self.va_loss.append(sum(self.va_temp_loss)/len(self.va_temp_loss))
         self.va_acc.append(sum(self.va_temp_acc)/len(self.va_temp_acc))
+        self.va_dice.append(sum(self.va_temp_dice)/len(self.va_temp_dice))
         self.va_temp_loss = []
         self.va_temp_acc = []
+        self.va_temp_dice = []
         print("------validation_epoch_end------")
     
 
